@@ -1,0 +1,733 @@
+{% extends 'base.html' %}
+
+{% block title %}Statistics{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>
+                <i class="fas fa-chart-bar me-2"></i>Lottery Statistics
+            </h1>
+            <div>
+                <div class="btn-group me-2" role="group">
+                    <button id="timeRangeBtn" type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="fas fa-calendar-alt me-1"></i>Time Range: Last 30 Days
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item time-range" href="#" data-days="30">Last 30 Days</a></li>
+                        <li><a class="dropdown-item time-range" href="#" data-days="90">Last 90 Days</a></li>
+                        <li><a class="dropdown-item time-range" href="#" data-days="365">Last Year</a></li>
+                        <li><a class="dropdown-item time-range" href="#" data-days="0">All Time</a></li>
+                    </ul>
+                </div>
+                <button id="refreshStatsBtn" class="btn btn-success">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh Data
+                </button>
+            </div>
+        </div>
+        
+        {% if error %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Error:</strong> {{ error }}
+            </div>
+        {% endif %}
+        
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            These statistics are based on historical lottery results and are updated automatically.
+            <span id="lastUpdated" class="float-end"><strong>Last updated:</strong> Loading...</span>
+        </div>
+        
+        <div id="loadingOverlay" class="d-none">
+            <div class="d-flex justify-content-center align-items-center">
+                <div class="spinner-border text-primary me-2" role="status"></div>
+                <span>Updating statistics...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Number Frequency
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" id="frequencyTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="all-time-tab" data-bs-toggle="tab" data-bs-target="#all-time" type="button" role="tab">All Time</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="last-year-tab" data-bs-toggle="tab" data-bs-target="#last-year" type="button" role="tab">Last Year</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="last-month-tab" data-bs-toggle="tab" data-bs-target="#last-month" type="button" role="tab">Last Month</button>
+                    </li>
+                </ul>
+                <div class="tab-content mt-3" id="frequencyTabContent">
+                    <div class="tab-pane fade show active" id="all-time" role="tabpanel">
+                        <canvas id="allTimeChart" height="250"></canvas>
+                    </div>
+                    <div class="tab-pane fade" id="last-year" role="tabpanel">
+                        <canvas id="lastYearChart" height="250"></canvas>
+                    </div>
+                    <div class="tab-pane fade" id="last-month" role="tabpanel">
+                        <canvas id="lastMonthChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Strong Number Frequency
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" id="strongFrequencyTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="strong-all-time-tab" data-bs-toggle="tab" data-bs-target="#strong-all-time" type="button" role="tab">All Time</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="strong-last-year-tab" data-bs-toggle="tab" data-bs-target="#strong-last-year" type="button" role="tab">Last Year</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="strong-last-month-tab" data-bs-toggle="tab" data-bs-target="#strong-last-month" type="button" role="tab">Last Month</button>
+                    </li>
+                </ul>
+                <div class="tab-content mt-3" id="strongFrequencyTabContent">
+                    <div class="tab-pane fade show active" id="strong-all-time" role="tabpanel">
+                        <canvas id="strongAllTimeChart" height="250"></canvas>
+                    </div>
+                    <div class="tab-pane fade" id="strong-last-year" role="tabpanel">
+                        <canvas id="strongLastYearChart" height="250"></canvas>
+                    </div>
+                    <div class="tab-pane fade" id="strong-last-month" role="tabpanel">
+                        <canvas id="strongLastMonthChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-fire me-2"></i>Hot & Cold Numbers
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-center">Hot Numbers (Last 30 Days)</h6>
+                        <div class="d-flex justify-content-center flex-wrap" id="hotNumbers">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-center">Cold Numbers (Last 30 Days)</h6>
+                        <div class="d-flex justify-content-center flex-wrap" id="coldNumbers">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-center">Hot Strong Numbers</h6>
+                        <div class="d-flex justify-content-center flex-wrap" id="hotStrongNumbers">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-center">Cold Strong Numbers</h6>
+                        <div class="d-flex justify-content-center flex-wrap" id="coldStrongNumbers">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-hourglass-half me-2"></i>Due Numbers
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    These numbers haven't appeared in the last 10 draws and may be "due" to appear soon.
+                </p>
+                
+                <h6 class="mt-3">Regular Numbers</h6>
+                <div class="d-flex justify-content-center flex-wrap mb-4" id="dueNumbers">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                
+                <h6>Strong Numbers</h6>
+                <div class="d-flex justify-content-center flex-wrap" id="dueStrongNumbers">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-link me-2"></i>Common Number Pairs
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    These number pairs appear together most frequently in winning combinations.
+                </p>
+                
+                <div class="row mt-3" id="commonPairs">
+                    <div class="text-center">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading common pairs...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <h2 class="mb-4">Visualizations</h2>
+        {% if visualizations %}
+            <div class="row">
+                {% for vis in visualizations %}
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="card-title mb-0">{{ vis.title }}</h5>
+                            </div>
+                            <div class="card-body text-center">
+                                <img src="{{ vis.path }}" alt="{{ vis.title }}" class="img-fluid" style="max-height: 400px;">
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                No visualizations available. Try running the analyzer first.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Add Chart.js library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Global variables
+    let currentTimeRange = 30; // Default: 30 days
+    let statisticsData = null;
+    let charts = {};
+    
+    // Initialize the page
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set up event listeners
+        document.getElementById('refreshStatsBtn').addEventListener('click', refreshStatistics);
+        
+        // Set up time range dropdown listeners
+        document.querySelectorAll('.time-range').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const days = parseInt(this.getAttribute('data-days'));
+                setTimeRange(days);
+            });
+        });
+        
+        // Initial data load
+        loadStatistics();
+    });
+    
+    // Load statistics data
+    function loadStatistics() {
+        showLoading(true);
+        
+        fetch('/api/statistics')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('No statistics available');
+                }
+                return response.json();
+            })
+            .then(data => {
+                statisticsData = data;
+                updateLastUpdated(data.timestamp || new Date().toISOString());
+                renderStatistics(data);
+                showLoading(false);
+            })
+            .catch(error => {
+                showError(error.message);
+                showLoading(false);
+            });
+    }
+    
+    // Refresh statistics data
+    function refreshStatistics() {
+        showLoading(true);
+        
+        fetch('/update-data', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            // Reload statistics after update
+            loadStatistics();
+        })
+        .catch(error => {
+            showError(error.message);
+            showLoading(false);
+        });
+    }
+    
+    // Set time range and update UI
+    function setTimeRange(days) {
+        currentTimeRange = days;
+        
+        // Update button text
+        const btnText = days === 0 ? 'All Time' : 
+                       days === 30 ? 'Last 30 Days' : 
+                       days === 90 ? 'Last 90 Days' : 'Last Year';
+        
+        document.getElementById('timeRangeBtn').innerHTML = 
+            `<i class="fas fa-calendar-alt me-1"></i>Time Range: ${btnText}`;
+        
+        // Re-render with the new time range
+        if (statisticsData) {
+            renderStatisticsForTimeRange(statisticsData, days);
+        }
+    }
+    
+    // Render statistics based on selected time range
+    function renderStatisticsForTimeRange(data, days) {
+        const timeKey = days === 0 ? 'all_time' : 
+                       days === 30 ? 'last_month' : 
+                       days === 90 ? 'last_quarter' : 'last_year';
+        
+        // If the specific time range doesn't exist, fall back to closest available
+        const fallbackKey = days === 90 ? 'last_year' : 
+                          (days > 30 ? 'last_year' : 'last_month');
+        
+        // Use the appropriate data or fallback
+        const frequencyData = data.frequency[timeKey] || data.frequency[fallbackKey];
+        const strongFrequencyData = data.strong_frequency[timeKey] || data.strong_frequency[fallbackKey];
+        const hotNumbersData = data.hot_numbers[timeKey] || data.hot_numbers[fallbackKey];
+        const coldNumbersData = data.cold_numbers[timeKey] || data.cold_numbers[fallbackKey];
+        const hotStrongNumbersData = data.hot_strong_numbers[timeKey] || data.hot_strong_numbers[fallbackKey];
+        const coldStrongNumbersData = data.cold_strong_numbers[timeKey] || data.cold_strong_numbers[fallbackKey];
+        
+        // Update charts and displays
+        updateFrequencyChart('allTimeChart', frequencyData, btnText);
+        updateStrongFrequencyChart('strongAllTimeChart', strongFrequencyData, btnText);
+        
+        // Update number displays
+        displayNumberSet('hotNumbers', hotNumbersData, 'danger');
+        displayNumberSet('coldNumbers', coldNumbersData, 'info');
+        displayNumberSet('hotStrongNumbers', hotStrongNumbersData, 'danger');
+        displayNumberSet('coldStrongNumbers', coldStrongNumbersData, 'info');
+    }
+    
+    // Render all statistics
+    function renderStatistics(data) {
+        // Create or update number frequency charts
+        createFrequencyChart('allTimeChart', data.frequency.all_time, 'All Time');
+        createFrequencyChart('lastYearChart', data.frequency.last_year, 'Last Year');
+        createFrequencyChart('lastMonthChart', data.frequency.last_month, 'Last Month');
+        
+        // Create or update strong number frequency charts
+        createStrongFrequencyChart('strongAllTimeChart', data.strong_frequency.all_time, 'All Time');
+        createStrongFrequencyChart('strongLastYearChart', data.strong_frequency.last_year, 'Last Year');
+        createStrongFrequencyChart('strongLastMonthChart', data.strong_frequency.last_month, 'Last Month');
+        
+        // Display hot and cold numbers
+        displayNumberSet('hotNumbers', data.hot_numbers.last_month, 'danger');
+        displayNumberSet('coldNumbers', data.cold_numbers.last_month, 'info');
+        
+        // Display hot and cold strong numbers
+        displayNumberSet('hotStrongNumbers', data.hot_strong_numbers.last_month, 'danger');
+        displayNumberSet('coldStrongNumbers', data.cold_strong_numbers.last_month, 'info');
+        
+        // Display due numbers
+        displayNumberSet('dueNumbers', data.due_numbers, 'success');
+        displayNumberSet('dueStrongNumbers', data.due_strong_numbers, 'success');
+        
+        // Display common pairs
+        displayCommonPairs(data.common_pairs);
+    }
+    
+    // Show/hide loading overlay
+    function showLoading(show) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (show) {
+            overlay.classList.remove('d-none');
+        } else {
+            overlay.classList.add('d-none');
+        }
+    }
+    
+    // Show error message
+    function showError(message) {
+        document.querySelectorAll('.card-body').forEach(el => {
+            el.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>${message}
+                </div>
+                <div class="text-center">
+                    <button onclick="refreshStatistics()" class="btn btn-success">
+                        <i class="fas fa-sync me-1"></i>Update Statistics
+                    </button>
+                </div>
+            `;
+        });
+    }
+    
+    // Update the last updated timestamp
+    function updateLastUpdated(timestamp) {
+        const lastUpdated = document.getElementById('lastUpdated');
+        const date = new Date(timestamp);
+        lastUpdated.innerHTML = `<strong>Last updated:</strong> ${date.toLocaleString()}`;
+    }
+    
+    // Create frequency chart
+    function createFrequencyChart(canvasId, data, title) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        // Convert data object to arrays
+        const labels = Object.keys(data);
+        const values = Object.values(data);
+        
+        // Create background colors (gradient from blue to red based on frequency)
+        const backgroundColors = values.map((value, index) => {
+            const normalizedValue = value / Math.max(...values);
+            return `rgba(${Math.round(normalizedValue * 255)}, ${Math.round(100 - normalizedValue * 100)}, ${Math.round(255 - normalizedValue * 255)}, 0.7)`;
+        });
+        
+        // Destroy existing chart if it exists
+        if (charts[canvasId]) {
+            charts[canvasId].destroy();
+        }
+        
+        // Create new chart
+        charts[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Frequency',
+                    data: values,
+                    backgroundColor: backgroundColors,
+                    borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: `Number Frequency - ${title}`
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `Frequency: ${context.raw} times`;
+                            }
+                        }
+                    },
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        return charts[canvasId];
+    }
+    
+    // Update existing frequency chart
+    function updateFrequencyChart(canvasId, data, title) {
+        // If chart doesn't exist, create it
+        if (!charts[canvasId]) {
+            return createFrequencyChart(canvasId, data, title);
+        }
+        
+        // Convert data object to arrays
+        const labels = Object.keys(data);
+        const values = Object.values(data);
+        
+        // Create background colors (gradient from blue to red based on frequency)
+        const backgroundColors = values.map((value, index) => {
+            const normalizedValue = value / Math.max(...values);
+            return `rgba(${Math.round(normalizedValue * 255)}, ${Math.round(100 - normalizedValue * 100)}, ${Math.round(255 - normalizedValue * 255)}, 0.7)`;
+        });
+        
+        // Update chart data
+        charts[canvasId].data.labels = labels;
+        charts[canvasId].data.datasets[0].data = values;
+        charts[canvasId].data.datasets[0].backgroundColor = backgroundColors;
+        charts[canvasId].data.datasets[0].borderColor = backgroundColors.map(color => color.replace('0.7', '1'));
+        
+        // Update title
+        charts[canvasId].options.plugins.title.text = `Number Frequency - ${title}`;
+        
+        // Update the chart
+        charts[canvasId].update();
+        
+        return charts[canvasId];
+    }
+    
+    // Create strong frequency chart
+    function createStrongFrequencyChart(canvasId, data, title) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        // Convert data object to arrays
+        const labels = Object.keys(data);
+        const values = Object.values(data);
+        
+        // Create background colors (shades of red)
+        const backgroundColors = values.map((value, index) => {
+            const normalizedValue = value / Math.max(...values);
+            return `rgba(255, ${Math.round(100 - normalizedValue * 100)}, ${Math.round(100 - normalizedValue * 100)}, 0.7)`;
+        });
+        
+        // Destroy existing chart if it exists
+        if (charts[canvasId]) {
+            charts[canvasId].destroy();
+        }
+        
+        // Create new chart
+        charts[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Frequency',
+                    data: values,
+                    backgroundColor: backgroundColors,
+                    borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: `Strong Number Frequency - ${title}`
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `Frequency: ${context.raw} times`;
+                            }
+                        }
+                    },
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        return charts[canvasId];
+    }
+    
+    // Update existing strong frequency chart
+    function updateStrongFrequencyChart(canvasId, data, title) {
+        // If chart doesn't exist, create it
+        if (!charts[canvasId]) {
+            return createStrongFrequencyChart(canvasId, data, title);
+        }
+        
+        // Convert data object to arrays
+        const labels = Object.keys(data);
+        const values = Object.values(data);
+        
+        // Create background colors (shades of red)
+        const backgroundColors = values.map((value, index) => {
+            const normalizedValue = value / Math.max(...values);
+            return `rgba(255, ${Math.round(100 - normalizedValue * 100)}, ${Math.round(100 - normalizedValue * 100)}, 0.7)`;
+        });
+        
+        // Update chart data
+        charts[canvasId].data.labels = labels;
+        charts[canvasId].data.datasets[0].data = values;
+        charts[canvasId].data.datasets[0].backgroundColor = backgroundColors;
+        charts[canvasId].data.datasets[0].borderColor = backgroundColors.map(color => color.replace('0.7', '1'));
+        
+        // Update title
+        charts[canvasId].options.plugins.title.text = `Strong Number Frequency - ${title}`;
+        
+        // Update the chart
+        charts[canvasId].update();
+        
+        return charts[canvasId];
+    }
+    
+    // Display number set
+    function displayNumberSet(containerId, numbers, colorClass) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        
+        if (!numbers || numbers.length === 0) {
+            container.innerHTML = '<div class="alert alert-info">No data available</div>';
+            return;
+        }
+        
+        numbers.forEach(num => {
+            const numSpan = document.createElement('span');
+            numSpan.className = `badge bg-${colorClass} rounded-circle m-1 p-2`;
+            numSpan.style.width = '35px';
+            numSpan.style.height = '35px';
+            numSpan.style.fontSize = '16px';
+            numSpan.textContent = num;
+            
+            // Add tooltip with frequency data if available
+            if (statisticsData && statisticsData.frequency && statisticsData.frequency.all_time) {
+                const frequency = statisticsData.frequency.all_time[num] || 0;
+                numSpan.setAttribute('data-bs-toggle', 'tooltip');
+                numSpan.setAttribute('data-bs-placement', 'top');
+                numSpan.setAttribute('title', `Number ${num}: Drawn ${frequency} times`);
+            }
+            
+            container.appendChild(numSpan);
+        });
+        
+        // Initialize tooltips
+        const tooltips = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltips.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+    
+    // Display common pairs
+    function displayCommonPairs(pairs) {
+        const container = document.getElementById('commonPairs');
+        container.innerHTML = '';
+        
+        if (!pairs || Object.keys(pairs).length === 0) {
+            container.innerHTML = '<div class="alert alert-info">No common pairs data available</div>';
+            return;
+        }
+        
+        // Convert pairs object to array of [pair, frequency] entries and sort by frequency
+        const pairsArray = Object.entries(pairs).sort((a, b) => b[1] - a[1]);
+        
+        pairsArray.forEach(([pair, frequency]) => {
+            const colDiv = document.createElement('div');
+            colDiv.className = 'col-md-3 col-sm-6 mb-3';
+            
+            const cardDiv = document.createElement('div');
+            cardDiv.className = 'card text-center h-100';
+            
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body';
+            
+            // Split the pair string (e.g., "1-2") into individual numbers
+            const numbers = pair.split('-');
+            
+            const numbersDiv = document.createElement('div');
+            numbersDiv.className = 'd-flex justify-content-center mb-2';
+            
+            numbers.forEach(num => {
+                const numSpan = document.createElement('span');
+                numSpan.className = 'badge bg-warning text-dark rounded-circle mx-1 p-2';
+                numSpan.style.width = '35px';
+                numSpan.style.height = '35px';
+                numSpan.style.fontSize = '16px';
+                numSpan.textContent = num;
+                
+                // Add tooltip with frequency data if available
+                if (statisticsData && statisticsData.frequency && statisticsData.frequency.all_time) {
+                    const numFrequency = statisticsData.frequency.all_time[num] || 0;
+                    numSpan.setAttribute('data-bs-toggle', 'tooltip');
+                    numSpan.setAttribute('data-bs-placement', 'top');
+                    numSpan.setAttribute('title', `Number ${num}: Drawn ${numFrequency} times`);
+                }
+                
+                numbersDiv.appendChild(numSpan);
+            });
+            
+            const frequencyDiv = document.createElement('div');
+            frequencyDiv.className = 'mt-2';
+            
+            // Calculate percentage of all draws
+            let percentageText = '';
+            if (statisticsData && statisticsData.total_draws) {
+                const percentage = (frequency / statisticsData.total_draws * 100).toFixed(1);
+                percentageText = ` (${percentage}% of draws)`;
+            }
+            
+            frequencyDiv.innerHTML = `<small class="text-muted">Appeared together ${frequency} times${percentageText}</small>`;
+            
+            cardBody.appendChild(numbersDiv);
+            cardBody.appendChild(frequencyDiv);
+            cardDiv.appendChild(cardBody);
+            colDiv.appendChild(cardDiv);
+            container.appendChild(colDiv);
+        });
+        
+        // Initialize tooltips
+        const tooltips = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltips.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+
+{% block title %}Predictions{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="mb-4">
+            <i class="fas fa-lightbulb me-2"></i>Lottery Predictions
+        </h1>
+        
+        {% if error %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Error:</strong> {{ error }}
+            </div>
+        {% endif %}
+        
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-sliders-h me-2"></i>Prediction Settings
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="prediction-settings-form" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="num-sets" class="form-label">Number of Prediction Sets</label>
+                        <select class="form-select" id="num-sets" name="num_sets">
+                            <option value="3">3 sets</option>
+                            <option value="6" selected>6 sets</option>
+                            <option value="9">9 sets</option>
+                            <option value="12">12 sets</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="weight-recent" class="form-label">Weight Recent Draws</label>
+                        <select class="form-select" id="weight-recent" name="weight_recent">
+                            <option value="1.0">Normal (1.0x)</option>
+                            <option value="1.5">Medium (1.5x)</option>
+                            <option value="2.0" selected>High (2.0x)</option>
+                            <option value="3.0">Very High (3.0x)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Favor Number Types</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="favor-hot" name="favor_hot" value="true">
+                            <label class="form-check-label" for="favor-hot">Favor Hot Numbers</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="favor-due" name="favor_due" value="true">
+                            <label class="form-check-label" for="favor-due">Favor Due Numbers</label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" id="generate-prediction-btn" class="btn btn-primary w-100">
+                            <i class="fas fa-magic me-1"></i>Generate Prediction
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        {% if prediction_data %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Last prediction generated on: <strong>{{ prediction_data.timestamp }}</strong>
+            </div>
+            
+            <div class="row">
+                {% for prediction_set in prediction_data.prediction_sets %}
+                    <div class="col-md-4 mb-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="card-title mb-0">Prediction Set #{{ loop.index }}</h5>
+                            </div>
+                            <div class="card-body text-center">
+                                <h6 class="mb-3">Regular Numbers</h6>
+                                <div class="d-flex justify-content-center mb-4">
+                                    {% for num in prediction_set.regular_numbers %}
+                                        <span class="badge bg-primary rounded-circle mx-1 p-2" style="width: 40px; height: 40px; font-size: 18px;">
+                                            {{ num }}
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                                
+                                <h6 class="mb-3">Strong Number</h6>
+                                <div class="d-flex justify-content-center">
+                                    <span class="badge bg-danger rounded-circle mx-1 p-2" style="width: 40px; height: 40px; font-size: 18px;">
+                                        {{ prediction_set.strong_number }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                No predictions available. Use the form above to generate your first prediction.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>About Our Predictions
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    Our lottery predictions are generated using statistical analysis of historical lottery results.
+                    We use various methods to identify patterns and trends, including:
+                </p>
+                
+                <ul>
+                    <li><strong>Frequency Analysis:</strong> We analyze how often each number has appeared in past draws.</li>
+                    <li><strong>Hot and Cold Numbers:</strong> We identify which numbers are drawn frequently (hot) or rarely (cold).</li>
+                    <li><strong>Due Numbers:</strong> We look for numbers that haven't appeared in recent draws and may be "due" to appear.</li>
+                    <li><strong>Number Pairs:</strong> We analyze which numbers tend to appear together.</li>
+                    <li><strong>Odd/Even and High/Low Patterns:</strong> We examine the distribution of odd/even and high/low numbers in winning combinations.</li>
+                </ul>
+                
+                <div class="alert alert-warning">
+                    <strong>Disclaimer:</strong> These predictions are based on statistical analysis and do not guarantee winning results.
+                    Lottery games are games of chance, and past results do not necessarily indicate future outcomes.
+                    Please play responsibly.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Handle prediction form submission
+    document.getElementById('prediction-settings-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+        
+        if (confirm('Generate a new prediction with your custom settings? This may take a few moments.')) {
+            const submitButton = document.getElementById('generate-prediction-btn');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...';
+            
+            // Get form values
+            const numSets = document.getElementById('num-sets').value;
+            const weightRecent = document.getElementById('weight-recent').value;
+            const favorHot = document.getElementById('favor-hot').checked;
+            const favorDue = document.getElementById('favor-due').checked;
+            
+            // Create request payload
+            const payload = {
+                num_sets: parseInt(numSets),
+                weight_recent: parseFloat(weightRecent),
+                favor_hot: favorHot,
+                favor_due: favorDue
+            };
+            
+            // Show loading overlay
+            const loadingOverlay = document.createElement('div');
+            loadingOverlay.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center';
+            loadingOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            loadingOverlay.style.zIndex = '9999';
+            loadingOverlay.innerHTML = `
+                <div class="card p-4 text-center">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5>Generating Predictions...</h5>
+                    <p class="text-muted">This may take a few moments.</p>
+                </div>
+            `;
+            document.body.appendChild(loadingOverlay);
+            
+            // Send request to API
+            fetch('/api/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to generate prediction');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Remove loading overlay
+                document.body.removeChild(loadingOverlay);
+                
+                // Redirect to predictions page
+                window.location.href = '/predictions';
+            })
+            .catch(error => {
+                // Remove loading overlay
+                if (document.body.contains(loadingOverlay)) {
+                    document.body.removeChild(loadingOverlay);
+                }
+                
+                // Show error message
+                alert('Error generating prediction: ' + error.message);
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-magic me-1"></i>Generate Prediction';
+            });
+        }
+    });
+    
+    // Initialize tooltips
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add tooltips to prediction settings
+        const tooltips = [
+            { id: 'num-sets', title: 'Number of different prediction sets to generate' },
+            { id: 'weight-recent', title: 'How much to prioritize recent draw data over older data' },
+            { id: 'favor-hot', title: 'Include numbers that appear frequently in recent draws' },
+            { id: 'favor-due', title: 'Include numbers that haven\'t appeared in recent draws' }
+        ];
+        
+        tooltips.forEach(tooltip => {
+            const element = document.getElementById(tooltip.id);
+            if (element) {
+                element.setAttribute('data-bs-toggle', 'tooltip');
+                element.setAttribute('data-bs-placement', 'top');
+                element.setAttribute('title', tooltip.title);
+            }
+        });
+        
+        // Initialize Bootstrap tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
+{% endblock %}

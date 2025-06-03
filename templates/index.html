@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center mb-4">
+        <h1 class="display-4">Loto Win Prediction</h1>
+        <p class="lead">Statistical analysis and prediction for the Israeli Lotto</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>Latest Predictions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="latest-predictions">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading predictions...</p>
+                    </div>
+                </div>
+                <div class="text-center mt-3">
+                    <a href="/predictions" class="btn btn-outline-primary">
+                        <i class="fas fa-eye me-1"></i>View All Predictions
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Number Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="number-stats">
+                    <div class="text-center">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading statistics...</p>
+                    </div>
+                </div>
+                <div class="text-center mt-3">
+                    <a href="/statistics" class="btn btn-outline-success">
+                        <i class="fas fa-chart-line me-1"></i>View Detailed Statistics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>About Loto Win Prediction
+                </h5>
+            </div>
+            <div class="card-body">
+                <h5>How It Works</h5>
+                <p>
+                    This application analyzes historical Israeli Lotto results and provides statistical predictions for upcoming draws.
+                    The predictions are based on various statistical methods, including:
+                </p>
+                <ul>
+                    <li><strong>Frequency Analysis:</strong> Identifying which numbers appear most and least frequently</li>
+                    <li><strong>Pattern Recognition:</strong> Detecting patterns in historical draws</li>
+                    <li><strong>Hot and Cold Numbers:</strong> Tracking numbers that are drawn frequently (hot) or rarely (cold)</li>
+                    <li><strong>Due Numbers:</strong> Identifying numbers that haven't appeared in recent draws</li>
+                </ul>
+                
+                <h5>Scheduled Updates</h5>
+                <p>
+                    The application automatically updates its predictions every Sunday and Wednesday morning,
+                    in preparation for the upcoming Lotto draws.
+                </p>
+                
+                <h5>Disclaimer</h5>
+                <p>
+                    The predictions provided by this application are based on statistical analysis and do not guarantee winning results.
+                    Lottery games are games of chance, and past results do not necessarily indicate future outcomes.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Fetch latest predictions
+    fetch('/api/predictions/latest')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('No predictions available');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const container = document.getElementById('latest-predictions');
+            container.innerHTML = '';
+            
+            // Add timestamp
+            const timestamp = new Date(data.timestamp);
+            const timestampEl = document.createElement('p');
+            timestampEl.className = 'text-muted mb-3';
+            timestampEl.innerHTML = `<i class="fas fa-clock me-1"></i>Last updated: ${timestamp.toLocaleString()}`;
+            container.appendChild(timestampEl);
+            
+            // Add prediction sets (limit to 3 for homepage)
+            const sets = data.prediction_sets.slice(0, 3);
+            sets.forEach((set, index) => {
+                const setDiv = document.createElement('div');
+                setDiv.className = 'mb-3 p-2 border rounded';
+                
+                // Regular numbers
+                const regularDiv = document.createElement('div');
+                regularDiv.className = 'd-flex justify-content-center mb-2';
+                
+                set.regular_numbers.forEach(num => {
+                    const numSpan = document.createElement('span');
+                    numSpan.className = 'badge bg-primary rounded-circle mx-1 p-2';
+                    numSpan.style.width = '35px';
+                    numSpan.style.height = '35px';
+                    numSpan.style.fontSize = '16px';
+                    numSpan.textContent = num;
+                    regularDiv.appendChild(numSpan);
+                });
+                
+                // Strong number
+                const strongDiv = document.createElement('div');
+                strongDiv.className = 'd-flex justify-content-center';
+                
+                const strongSpan = document.createElement('span');
+                strongSpan.className = 'badge bg-danger rounded-circle mx-1 p-2';
+                strongSpan.style.width = '35px';
+                strongSpan.style.height = '35px';
+                strongSpan.style.fontSize = '16px';
+                strongSpan.textContent = set.strong_number;
+                strongDiv.appendChild(strongSpan);
+                
+                setDiv.appendChild(regularDiv);
+                setDiv.appendChild(strongDiv);
+                container.appendChild(setDiv);
+            });
+            
+            // Add note if there are more predictions
+            if (data.prediction_sets.length > 3) {
+                const noteEl = document.createElement('p');
+                noteEl.className = 'text-center text-muted';
+                noteEl.textContent = `+ ${data.prediction_sets.length - 3} more prediction sets`;
+                container.appendChild(noteEl);
+            }
+        })
+        .catch(error => {
+            const container = document.getElementById('latest-predictions');
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>${error.message}
+                </div>
+                <div class="text-center">
+                    <button id="generate-prediction-btn" class="btn btn-primary">
+                        <i class="fas fa-magic me-1"></i>Generate Prediction
+                    </button>
+                </div>
+            `;
+            
+            // Add event listener for generate button
+            document.getElementById('generate-prediction-btn').addEventListener('click', function() {
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...';
+                
+                fetch('/api/predictions/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ num_sets: 5 })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert('Prediction generated successfully!');
+                    location.reload();
+                })
+                .catch(error => {
+                    alert('Error generating prediction: ' + error);
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fas fa-magic me-1"></i>Generate Prediction';
+                });
+            });
+        });
+    
+    // Fetch number statistics
+    fetch('/api/statistics')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('No statistics available');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const container = document.getElementById('number-stats');
+            container.innerHTML = '';
+            
+            // Create hot numbers section
+            const hotNumbersDiv = document.createElement('div');
+            hotNumbersDiv.className = 'mb-3';
+            
+            const hotTitle = document.createElement('h6');
+            hotTitle.innerHTML = '<i class="fas fa-fire me-1"></i>Hot Numbers (Last 30 Days)';
+            hotNumbersDiv.appendChild(hotTitle);
+            
+            const hotNumbersRow = document.createElement('div');
+            hotNumbersRow.className = 'd-flex justify-content-center flex-wrap';
+            
+            data.hot_numbers.last_month.slice(0, 6).forEach(num => {
+                const numSpan = document.createElement('span');
+                numSpan.className = 'badge bg-danger rounded-circle m-1 p-2';
+                numSpan.style.width = '35px';
+                numSpan.style.height = '35px';
+                numSpan.style.fontSize = '16px';
+                numSpan.textContent = num;
+                hotNumbersRow.appendChild(numSpan);
+            });
+            
+            hotNumbersDiv.appendChild(hotNumbersRow);
+            container.appendChild(hotNumbersDiv);
+            
+            // Create cold numbers section
+            const coldNumbersDiv = document.createElement('div');
+            coldNumbersDiv.className = 'mb-3';
+            
+            const coldTitle = document.createElement('h6');
+            coldTitle.innerHTML = '<i class="fas fa-snowflake me-1"></i>Cold Numbers (Last 30 Days)';
+            coldNumbersDiv.appendChild(coldTitle);
+            
+            const coldNumbersRow = document.createElement('div');
+            coldNumbersRow.className = 'd-flex justify-content-center flex-wrap';
+            
+            data.cold_numbers.last_month.slice(0, 6).forEach(num => {
+                const numSpan = document.createElement('span');
+                numSpan.className = 'badge bg-info rounded-circle m-1 p-2';
+                numSpan.style.width = '35px';
+                numSpan.style.height = '35px';
+                numSpan.style.fontSize = '16px';
+                numSpan.textContent = num;
+                coldNumbersRow.appendChild(numSpan);
+            });
+            
+            coldNumbersDiv.appendChild(coldNumbersRow);
+            container.appendChild(coldNumbersDiv);
+            
+            // Create due numbers section
+            const dueNumbersDiv = document.createElement('div');
+            
+            const dueTitle = document.createElement('h6');
+            dueTitle.innerHTML = '<i class="fas fa-hourglass-half me-1"></i>Due Numbers';
+            dueNumbersDiv.appendChild(dueTitle);
+            
+            const dueNumbersRow = document.createElement('div');
+            dueNumbersRow.className = 'd-flex justify-content-center flex-wrap';
+            
+            data.due_numbers.slice(0, 6).forEach(num => {
+                const numSpan = document.createElement('span');
+                numSpan.className = 'badge bg-success rounded-circle m-1 p-2';
+                numSpan.style.width = '35px';
+                numSpan.style.height = '35px';
+                numSpan.style.fontSize = '16px';
+                numSpan.textContent = num;
+                dueNumbersRow.appendChild(numSpan);
+            });
+            
+            dueNumbersDiv.appendChild(dueNumbersRow);
+            container.appendChild(dueNumbersDiv);
+        })
+        .catch(error => {
+            const container = document.getElementById('number-stats');
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>${error.message}
+                </div>
+                <div class="text-center">
+                    <a href="/update-data" class="btn btn-success">
+                        <i class="fas fa-sync me-1"></i>Update Statistics
+                    </a>
+                </div>
+            `;
+        });
+</script>
+{% endblock %}
