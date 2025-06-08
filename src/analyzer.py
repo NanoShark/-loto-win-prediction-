@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class LottoAnalyzer:
     def __init__(self, data_dir='../data'):
         self.data_dir = data_dir
-        self.csv_path = os.path.join(data_dir, 'lotto_results.csv')
+        self.csv_path = os.path.join(data_dir, 'Lotto.csv')
         self.stats_dir = os.path.join(data_dir, 'stats')
         
         # Create stats directory if it doesn't exist
@@ -32,7 +32,8 @@ class LottoAnalyzer:
         
         # Constants for Israeli Lotto
         self.regular_range = range(1, 38)  # Regular numbers are 1-37
-        self.strong_range = range(1, 9)    # Strong numbers are 1-8
+        self.strong_range = range(1, 8)    # Strong numbers are 1-7
+        self.all_possible = set(range(1, 38))    # All possible numbers are 1-37
         
     def load_data(self):
         """
