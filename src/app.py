@@ -1,9 +1,10 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, url_for
 import os
 import json
 import logging
 from datetime import datetime
 import pandas as pd
+import numpy as np
 from scraper import LottoScraper
 from analyzer import LottoAnalyzer
 from predictor import LottoPredictor
@@ -19,6 +20,21 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+def convert_numpy_types_to_native(item):
+    """Recursively convert NumPy types in a data structure to native Python types."""
+    if isinstance(item, dict):
+        return {k: convert_numpy_types_to_native(v) for k, v in item.items()}
+    elif isinstance(item, list):
+        return [convert_numpy_types_to_native(i) for i in item]
+    elif isinstance(item, (np.integer, np.int_)):
+        return int(item)
+    elif isinstance(item, (np.floating, np.float_)):
+        return float(item)
+    elif isinstance(item, np.bool_):
+        return bool(item)
+    return item
+
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
@@ -55,7 +71,7 @@ def predictions():
             favor_due = request.args.get('favor_due', default='false') == 'true'
             
             # Generate predictions with parameters
-            prediction_sets = predictor.run_prediction(
+            prediction_sets = predictor.run_prediction_process(
                 num_sets=num_sets,
                 weight_recent=weight_recent,
                 favor_hot=favor_hot,
@@ -91,39 +107,19 @@ def predictions():
 
 @app.route('/statistics')
 def statistics():
-    """Statistics page"""
     try:
         # Generate statistics
         stats = analyzer.generate_statistics()
         
         # Also get the visualizations for display
         vis_dir = os.path.join(data_dir, 'stats', 'visualizations')
-        visualizations = []
+        images = [f for f in os.listdir(vis_dir) if f.endswith('.png')] if os.path.exists(vis_dir) else []
+        image_urls = [f"/static/images/{img}" for img in images]
         
-        if os.path.exists(vis_dir):
-            for img_file in os.listdir(vis_dir):
-                if img_file.endswith('.png'):
-                    # Create a relative path for the template
-                    vis_path = f'/static/images/{img_file}'
-                    title = img_file.replace('.png', '').replace('_', ' ').title()
-                    visualizations.append({'path': vis_path, 'title': title})
-                    
-                    # Copy the visualization to the static directory for the web app to access
-                    static_img_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'images')
-                    os.makedirs(static_img_dir, exist_ok=True)
-                    
-                    # Copy the file if it doesn't exist or is newer
-                    src_path = os.path.join(vis_dir, img_file)
-                    dst_path = os.path.join(static_img_dir, img_file)
-                    if not os.path.exists(dst_path) or os.path.getmtime(src_path) > os.path.getmtime(dst_path):
-                        import shutil
-                        shutil.copy2(src_path, dst_path)
-        
-        return render_template('statistics.html', stats=stats, visualizations=visualizations)
+        return render_template('statistics.html', stats=stats, image_urls=image_urls)
     except Exception as e:
-        logger.error(f"Error loading statistics: {e}")
-        # Return a template with an error message
-        return render_template('statistics.html', error=str(e))
+        logger.error(f"Error in statistics route: {e}")
+        return render_template('error.html', error=str(e)), 500
 
 @app.route('/history')
 def history():
@@ -167,7 +163,7 @@ def api_latest_prediction():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/predict', methods=['GET', 'POST'])
-def api_predict():
+def predict():
     try:
         # Get parameters from query string or POST data
         if request.method == 'POST':
@@ -198,7 +194,7 @@ def api_predict():
         logger.info(f"Generating predictions with parameters: num_sets={num_sets}, weight_recent={weight_recent}, favor_hot={favor_hot}, favor_due={favor_due}")
         
         # Run the full prediction process and save results
-        prediction_sets = predictor.run_prediction(
+        prediction_sets = predictor.run_prediction_process(
             num_sets=num_sets,
             weight_recent=weight_recent,
             favor_hot=favor_hot,
@@ -224,20 +220,16 @@ def api_predict():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/statistics')
-def api_statistics():
+def get_statistics():
     try:
-        # Get time range parameter if provided
-        days = request.args.get('days', default=None, type=int)
-        
-        # Generate statistics with optional time range
+        time_range = request.args.get('time_range', 'all')
+        days = None if time_range == 'all' else int(time_range)
+        logger.info(f"Generating lottery statistics for time range: {time_range} days")
         stats = analyzer.generate_statistics(days=days)
-        
-        # Add timestamp
-        stats['timestamp'] = datetime.now().isoformat()
-        
-        return jsonify(stats)
+        serializable_stats = convert_numpy_types_to_native(stats)
+        return jsonify(serializable_stats)
     except Exception as e:
-        app.logger.error(f"Error generating statistics: {str(e)}")
+        logger.error(f"Error generating statistics: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/history')

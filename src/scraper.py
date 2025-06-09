@@ -1,246 +1,362 @@
+"""
+Lotto Data Scraper
+Automatically updates Lotto.csv from the official archive
+"""
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import os
-import time
-import logging
 from datetime import datetime
+import logging
+import time
+import re
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("data/scraper.log"),
+        logging.FileHandler("../data/scraper.log"),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
 class LottoScraper:
-    def __init__(self, data_dir='../data'):
+    def __init__(self, data_dir=None):
         self.base_url = "https://www.pais.co.il/lotto/archive.aspx"
-        self.data_dir = data_dir
-        self.csv_path = os.path.join(data_dir, 'lotto_results.csv')
+        if data_dir:
+            self.csv_path = os.path.join(data_dir, "Lotto.csv")
+            log_path = os.path.join(data_dir, "scraper.log")
+        else:
+            self.csv_path = "../data/Lotto.csv"
+            log_path = "../data/scraper.log"
         
-        # Create data directory if it doesn't exist
-        os.makedirs(data_dir, exist_ok=True)
+        # Set up logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_path),
+                logging.StreamHandler()
+            ]
+        )
+        logger = logging.getLogger(__name__)
         
-    def scrape_results(self, max_pages=100):
-        """
-        Scrape lottery results from the Pais website
+        # Set up requests session
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.3'
+        })
         
-        Args:
-            max_pages: Maximum number of pages to scrape
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
+        
+        # Set up Selenium WebDriver
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run in headless mode
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        self.driver = webdriver.Chrome(options=chrome_options)
+        logger.info("Selenium WebDriver initialized")
+        
+        # Set up logging
+        logger = logging.getLogger(__name__)
+
+    def __del__(self):
+        """Ensure the WebDriver is properly closed"""
+        try:
+            self.driver.quit()
+            logger.info("Selenium WebDriver closed")
+        except Exception as e:
+            logger.error(f"Error closing WebDriver: {e}")
+
+    def scrape_latest_results(self):
+        """Scrape the latest lottery results from the official archive using Selenium or direct download"""
+        try:
+            logger.info("Fetching latest lottery results")
             
-        Returns:
-            DataFrame containing the lottery results
-        """
-        logger.info("Starting to scrape lottery results")
-        
-        all_results = []
-        page = 1
-        
-        while page <= max_pages:
+            # First, try direct download of CSV if possible
+            csv_url = "https://www.pais.co.il/lotto/archive.aspx#"  # Provided URL
+            logger.info(f"Attempting direct download from {csv_url}")
+            
+            # Add delay to be respectful to the server
+            time.sleep(1)
+            
+            # Try to download directly with requests
             try:
-                logger.info(f"Scraping page {page}")
-                
-                # Make request to the website
-                if page == 1:
-                    url = self.base_url
-                else:
-                    url = f"{self.base_url}?page={page}"
-                
-                response = requests.get(url)
+                response = self.session.get(csv_url, timeout=30)
                 response.raise_for_status()
                 
-                # Parse the HTML
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Find the table containing lottery results
-                table = soup.find('table', class_='archive_table')
-                
-                if not table:
-                    logger.info(f"No more results found on page {page}. Stopping.")
-                    break
-                
-                # Extract rows from the table
-                rows = table.find_all('tr')[1:]  # Skip header row
-                
-                if not rows:
-                    logger.info(f"No rows found on page {page}. Stopping.")
-                    break
-                
-                # Process each row
-                for row in rows:
-                    cells = row.find_all('td')
-                    
-                    if len(cells) < 9:  # Ensure we have enough cells
-                        continue
-                    
-                    # Extract data from cells
-                    try:
-                        draw_date = cells[0].text.strip()
-                        draw_number = cells[1].text.strip()
-                        
-                        # Extract the 6 regular numbers and the strong number
-                        regular_numbers = []
-                        for i in range(2, 8):
-                            number = cells[i].text.strip()
-                            regular_numbers.append(int(number))
-                        
-                        strong_number = int(cells[8].text.strip())
-                        
-                        # Add to results
-                        result = {
-                            'draw_date': draw_date,
-                            'draw_number': draw_number,
-                            'number_1': regular_numbers[0],
-                            'number_2': regular_numbers[1],
-                            'number_3': regular_numbers[2],
-                            'number_4': regular_numbers[3],
-                            'number_5': regular_numbers[4],
-                            'number_6': regular_numbers[5],
-                            'strong_number': strong_number
-                        }
-                        
-                        all_results.append(result)
-                    except Exception as e:
-                        logger.error(f"Error processing row: {e}")
-                
-                # Move to next page
-                page += 1
-                
-                # Be nice to the server
-                time.sleep(1)
-                
+                # Check if response contains CSV data or needs further processing
+                content_type = response.headers.get('content-type', '').lower()
+                if 'csv' in content_type or 'text/csv' in content_type:
+                    logger.info("Direct CSV download successful")
+                    df = pd.read_csv(response.content)
+                    logger.info(f"Successfully loaded {len(df)} lottery draws from CSV")
+                    return df
+                else:
+                    logger.info("Direct download did not return CSV, proceeding with Selenium")
             except Exception as e:
-                logger.error(f"Error scraping page {page}: {e}")
-                break
-        
-        # Convert to DataFrame
-        df = pd.DataFrame(all_results)
-        
-        # Convert date strings to datetime objects
-        df['draw_date'] = pd.to_datetime(df['draw_date'], format='%d/%m/%Y', errors='coerce')
-        
-        # Sort by draw date (newest first)
-        df = df.sort_values('draw_date', ascending=False)
-        
-        # Save to CSV
-        df.to_csv(self.csv_path, index=False)
-        
-        logger.info(f"Scraped {len(df)} lottery results and saved to {self.csv_path}")
-        
-        return df
-    
-    def load_results(self):
-        """
-        Load lottery results from CSV file if it exists, otherwise scrape them
-        
-        Returns:
-            DataFrame containing the lottery results
-        """
-        if os.path.exists(self.csv_path):
-            logger.info(f"Loading lottery results from {self.csv_path}")
+                logger.warning(f"Direct download failed: {e}, falling back to Selenium")
+            
+            # If direct download fails, proceed with Selenium
+            logger.info("Using Selenium for dynamic content")
+            # Navigate to the page with Selenium
+            self.driver.get(self.base_url)
+            
+            # Wait longer for dynamic content to load
+            WebDriverWait(self.driver, 40).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            logger.info("Page loaded with Selenium")
+            
+            # Try to interact with the page to load results (e.g., click a button or select an option)
+            try:
+                buttons = self.driver.find_elements(By.TAG_NAME, "button")
+                for btn in buttons:
+                    btn_text = btn.text.strip()
+                    if btn_text and ("תוצאות" in btn_text or "results" in btn_text.lower() or "הגרלה" in btn_text):
+                        btn.click()
+                        logger.info(f"Clicked button with text: {btn_text}")
+                        time.sleep(2)  # Wait for content to load after click
+            except Exception as e:
+                logger.warning(f"Error interacting with buttons: {e}")
+            
+            # Parse the rendered HTML content
+            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            
+            # Log page title for context
+            title = soup.title.get_text(strip=True) if soup.title else "No title found"
+            logger.info(f"Page title: {title}")
+            
+            # Find lottery result elements - try various structures
+            result_elements = soup.find_all(['div', 'li', 'span', 'table'], class_=re.compile(r'.*lotto.*|.*result.*|.*draw.*|.*number.*', re.I))
+            logger.info(f"Found {len(result_elements)} potential result elements")
+            
+            if not result_elements:
+                # Log all divs with potential content for debugging
+                divs = soup.find_all('div', class_=True)
+                div_classes = [div.get('class', []) for div in divs[:10]]  # Limit to first 10
+                logger.info(f"Sample div classes on page: {div_classes}")
+                logger.warning("No lottery results found on page")
+                body_text = soup.body.get_text(strip=True)[:500] if soup.body else "No body content"
+                logger.debug(f"Page content sample: {body_text}")
+                return pd.DataFrame()
+            
+            results = self._extract_results_from_elements(result_elements)
+            if not results:
+                logger.warning("No valid lottery results extracted")
+                # Log content of some elements for debugging
+                for i, elem in enumerate(result_elements[:10]):  # Limit to first 10
+                    elem_text = elem.get_text(strip=True)[:100]  # Limit text length
+                    logger.debug(f"Element {i} content: {elem_text}")
+                return pd.DataFrame()
+            
+            df = pd.DataFrame(results)
+            logger.info(f"Successfully scraped {len(df)} lottery draws")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error scraping results with Selenium: {e}")
+            return pd.DataFrame()
+
+    def _extract_results_from_elements(self, elements):
+        """Extract lottery results from non-table elements like divs or spans"""
+        try:
+            results = []
+            current_draw = None
+            numbers = []
+            strong_number = None
+            draw_number = None
+            draw_date = None
+            
+            for elem in elements:
+                text = elem.get_text(strip=True)
+                if not text:
+                    continue
+                
+                logger.debug(f"Processing element text: {text}")
+                
+                # Look for draw number
+                if 'הגרלה' in text or 'Draw' in text or 'מספר' in text:
+                    match = re.search(r'\d{3,5}', text)  # Broader range for draw numbers
+                    if match:
+                        if current_draw and len(numbers) >= 6:
+                            # Save previous draw if exists
+                            results.append({
+                                'draw_number': current_draw,
+                                'draw_date': draw_date or '',
+                                'number_1': numbers[0] if len(numbers) > 0 else '',
+                                'number_2': numbers[1] if len(numbers) > 1 else '',
+                                'number_3': numbers[2] if len(numbers) > 2 else '',
+                                'number_4': numbers[3] if len(numbers) > 3 else '',
+                                'number_5': numbers[4] if len(numbers) > 4 else '',
+                                'number_6': numbers[5] if len(numbers) > 5 else '',
+                                'strong_number': strong_number if strong_number else ''
+                            })
+                            logger.info(f"Saved draw {current_draw} with {len(numbers)} numbers")
+                        draw_number = match.group()
+                        current_draw = draw_number
+                        numbers = []
+                        strong_number = None
+                        draw_date = None
+                
+                # Look for date
+                if not draw_date:
+                    date_match = re.search(r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', text)
+                    if date_match:
+                        draw_date = date_match.group()
+                        parts = re.split(r'[-/]', draw_date)
+                        if len(parts[-1]) == 2:
+                            parts[-1] = '20' + parts[-1]
+                        draw_date = '/'.join(parts)
+                
+                # Look for numbers - be more aggressive
+                num_match = re.findall(r'\b\d{1,2}\b', text)
+                for num_text in num_match:
+                    num = int(num_text)
+                    if 1 <= num <= 37 and num not in numbers:  # Avoid duplicates
+                        numbers.append(num)
+                        logger.debug(f"Added number {num} to draw {current_draw}")
+                
+                # Look for strong number
+                if 'חזק' in text or 'strong' in text.lower():
+                    strong_match = re.search(r'\d+', text)
+                    if strong_match:
+                        strong_number = strong_match.group()
+                        logger.debug(f"Found strong number {strong_number} for draw {current_draw}")
+                    else:
+                        next_elem = elem.find_next()
+                        if next_elem:
+                            next_text = next_elem.get_text(strip=True)
+                            strong_match = re.search(r'\d+', next_text)
+                            if strong_match:
+                                strong_number = strong_match.group()
+                                logger.debug(f"Found strong number {strong_number} in next element for draw {current_draw}")
+            
+            # Don't forget to add the last draw if exists
+            if current_draw and len(numbers) >= 6:
+                results.append({
+                    'draw_number': current_draw,
+                    'draw_date': draw_date or '',
+                    'number_1': numbers[0] if len(numbers) > 0 else '',
+                    'number_2': numbers[1] if len(numbers) > 1 else '',
+                    'number_3': numbers[2] if len(numbers) > 2 else '',
+                    'number_4': numbers[3] if len(numbers) > 3 else '',
+                    'number_5': numbers[4] if len(numbers) > 4 else '',
+                    'number_6': numbers[5] if len(numbers) > 5 else '',
+                    'strong_number': strong_number if strong_number else ''
+                })
+                logger.info(f"Saved last draw {current_draw} with {len(numbers)} numbers")
+            
+            # Filter out incomplete results
+            valid_results = [r for r in results if r['number_1'] and r['number_2'] and r['number_3'] and r['number_4'] and r['number_5'] and r['number_6']]
+            logger.info(f"Extracted {len(valid_results)} valid draws from elements")
+            return valid_results
+        except Exception as e:
+            logger.error(f"Error extracting results from elements: {e}")
+            return []
+
+    def update_data_file(self):
+        """Update the Lotto.csv file with new results"""
+        try:
+            # Scrape latest results
+            new_data = self.scrape_latest_results()
+            
+            if new_data.empty:
+                logger.warning("No new data scraped")
+                return False
+            
+            # Load existing data if file exists
+            if os.path.exists(self.csv_path):
+                try:
+                    existing_data = pd.read_csv(self.csv_path)
+                    logger.info(f"Loaded {len(existing_data)} existing records")
+                    
+                    # Combine and remove duplicates based on draw_number
+                    combined = pd.concat([new_data, existing_data], ignore_index=True)
+                    combined = combined.drop_duplicates(subset=['draw_number'], keep='first')
+                    
+                    # Sort by draw_number (descending for newest first)
+                    combined['draw_number'] = pd.to_numeric(combined['draw_number'], errors='coerce')
+                    combined = combined.sort_values('draw_number', ascending=False)
+                    
+                except Exception as e:
+                    logger.error(f"Error loading existing data: {e}")
+                    combined = new_data
+            else:
+                combined = new_data
+                logger.info("No existing data file found, creating new one")
+            
+            # Create backup of existing file
+            if os.path.exists(self.csv_path):
+                backup_path = self.csv_path.replace('.csv', f'_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv')
+                os.rename(self.csv_path, backup_path)
+                logger.info(f"Created backup: {backup_path}")
+            
+            # Save updated data
+            combined.to_csv(self.csv_path, index=False)
+            logger.info(f"Updated data file with {len(combined)} total draws")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating data file: {e}")
+            return False
+
+    def validate_data(self):
+        """Validate the scraped data"""
+        try:
+            if not os.path.exists(self.csv_path):
+                logger.error("Data file does not exist")
+                return False
+            
             df = pd.read_csv(self.csv_path)
             
-            # Convert date strings to datetime objects
-            df['draw_date'] = pd.to_datetime(df['draw_date'])
+            # Check for required columns
+            required_cols = ['draw_number', 'draw_date', 'number_1', 'number_2', 'number_3', 'number_4', 'number_5', 'number_6']
+            missing_cols = [col for col in required_cols if col not in df.columns]
             
-            return df
-        else:
-            logger.info(f"No existing results found at {self.csv_path}. Scraping new data.")
-            return self.scrape_results()
-    
-    def update_results(self, force_update=False):
-        """
-        Update lottery results by scraping the latest data
-        
-        Args:
-            force_update: If True, always scrape new data and delete old CSV
+            if missing_cols:
+                logger.error(f"Missing required columns: {missing_cols}")
+                return False
             
-        Returns:
-            DataFrame containing the updated lottery results
-        """
-        # If force update is requested, delete the existing CSV file
-        if force_update and os.path.exists(self.csv_path):
-            try:
-                logger.info(f"Deleting existing CSV file at {self.csv_path}")
-                os.remove(self.csv_path)
-                logger.info("Existing CSV file deleted successfully")
-            except Exception as e:
-                logger.error(f"Error deleting CSV file: {e}")
-        
-        # If force update or no existing data, scrape all results
-        if force_update or not os.path.exists(self.csv_path):
-            logger.info("Scraping all lottery results from the Pais website")
-            df = self.scrape_results()
-            logger.info(f"Scraped {len(df)} lottery results")
-            return df
-        
-        # Otherwise, check if we need to update based on the latest draw date
-        try:
-            # Try to read with iso-8859-1 encoding first
-            existing_df = pd.read_csv(self.csv_path, encoding='iso-8859-1')
+            # Check for duplicate draw numbers
+            duplicates = df[df.duplicated(subset=['draw_number'], keep=False)]
+            if not duplicates.empty:
+                logger.warning(f"Found {len(duplicates)} duplicate draw numbers")
             
-            # Rename columns if needed
-            if 'draw_date' not in existing_df.columns:
-                # The first column is the draw number, second is the date, then 6 regular numbers, then the strong number
-                column_mapping = {
-                    existing_df.columns[0]: 'draw_number',
-                    existing_df.columns[1]: 'draw_date',
-                    existing_df.columns[2]: 'number_1',
-                    existing_df.columns[3]: 'number_2',
-                    existing_df.columns[4]: 'number_3',
-                    existing_df.columns[5]: 'number_4',
-                    existing_df.columns[6]: 'number_5',
-                    existing_df.columns[7]: 'number_6',
-                    existing_df.columns[8]: 'strong_number'
-                }
-                existing_df = existing_df.rename(columns=column_mapping)
+            logger.info(f"Data validation completed. {len(df)} records found.")
+            return True
             
-            # Convert date strings to datetime objects
-            existing_df['draw_date'] = pd.to_datetime(existing_df['draw_date'], format='%d/%m/%Y', errors='coerce')
-            
-            # Get the latest draw date
-            latest_date = existing_df['draw_date'].max()
-            
-            logger.info(f"Latest draw date in our data: {latest_date}")
-            
-            # Check if we need to update (if today is after the latest draw date)
-            today = datetime.now().date()
-            if latest_date.date() < today:
-                logger.info("Data needs updating. Scraping latest results.")
-                new_df = self.scrape_results(max_pages=5)  # Only scrape a few pages for updates
-                
-                # Combine new and existing data
-                combined_df = pd.concat([new_df, existing_df])
-                
-                # Remove duplicates based on draw number
-                combined_df = combined_df.drop_duplicates(subset=['draw_number'])
-                
-                # Sort by draw date (newest first)
-                combined_df = combined_df.sort_values('draw_date', ascending=False)
-                
-                # Save to CSV
-                combined_df.to_csv(self.csv_path, index=False)
-                
-                logger.info(f"Updated data with {len(new_df)} new results")
-                
-                return combined_df
-            else:
-                logger.info("Data is up to date. No need to scrape.")
-                return existing_df
         except Exception as e:
-            logger.error(f"Error reading existing data: {e}")
-            logger.info("Falling back to scraping all results.")
-            return self.scrape_results()
+            logger.error(f"Error validating data: {e}")
+            return False
 
+def main():
+    """Main function to run the scraper"""
+    scraper = LottoScraper()
+    
+    logger.info("Starting Lotto data scraper...")
+    
+    # Update data
+    success = scraper.update_data_file()
+    
+    if success:
+        # Validate the updated data
+        scraper.validate_data()
+        logger.info("Scraper completed successfully")
+    else:
+        logger.error("Scraper failed to update data")
+    
+    return success
 
 if __name__ == "__main__":
-    # Test the scraper
-    scraper = LottoScraper(data_dir='../data')
-    results = scraper.update_results()
-    print(f"Loaded {len(results)} lottery results")
-    print(results.head())
+    main()
