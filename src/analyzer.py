@@ -80,47 +80,33 @@ class LottoAnalyzer:
         
         return df
     
-    def get_number_frequency(self, time_period=None):
-        """
-        Calculate the frequency of each regular number
+    def get_number_frequency(self, column=None, days=None):
+        """Calculate the frequency of numbers in the specified column or all number columns"""
+        if column:
+            numbers = self.df[column]
+        else:
+            numbers = pd.concat([self.df[f'number_{i}'] for i in range(1, 7)])
         
-        Args:
-            time_period: Optional time period to filter results (in days)
-            
-        Returns:
-            Dictionary with number frequencies
-        """
-        if self.df.empty:
-            logger.error("No data available for analysis")
-            return {}
+        # Filter by time range if days is specified
+        if days is not None:
+            end_date = pd.to_datetime('today')
+            start_date = end_date - pd.Timedelta(days=days)
+            self.df['draw_date'] = pd.to_datetime(self.df['draw_date'], format='%d/%m/%Y', errors='coerce')
+            mask = (self.df['draw_date'] >= start_date) & (self.df['draw_date'] <= end_date)
+            filtered_df = self.df.loc[mask]
+            if column:
+                numbers = filtered_df[column]
+            else:
+                numbers = pd.concat([filtered_df[f'number_{i}'] for i in range(1, 7)])
         
-        # Filter by time period if specified
-        filtered_df = self.df
-        if time_period:
-            cutoff_date = datetime.now() - timedelta(days=time_period)
-            filtered_df = self.df[self.df['draw_date'] >= cutoff_date]
-        
-        # Extract all regular numbers
-        all_numbers = []
-        for i in range(1, 7):
-            all_numbers.extend(filtered_df[f'number_{i}'].tolist())
-        
-        # Count frequencies
-        frequency = Counter(all_numbers)
-        
-        # Ensure all possible numbers are included (even if frequency is 0)
-        for num in self.regular_range:
-            if num not in frequency:
-                frequency[num] = 0
-        
-        return dict(sorted(frequency.items()))
+        return numbers.value_counts().sort_index().to_dict()
     
-    def get_strong_number_frequency(self, time_period=None):
+    def get_strong_number_frequency(self, days=None):
         """
         Calculate the frequency of each strong number
         
         Args:
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             
         Returns:
             Dictionary with strong number frequencies
@@ -131,9 +117,12 @@ class LottoAnalyzer:
         
         # Filter by time period if specified
         filtered_df = self.df
-        if time_period:
-            cutoff_date = datetime.now() - timedelta(days=time_period)
-            filtered_df = self.df[self.df['draw_date'] >= cutoff_date]
+        if days:
+            end_date = pd.to_datetime('today')
+            start_date = end_date - pd.Timedelta(days=days)
+            self.df['draw_date'] = pd.to_datetime(self.df['draw_date'], format='%d/%m/%Y', errors='coerce')
+            mask = (self.df['draw_date'] >= start_date) & (self.df['draw_date'] <= end_date)
+            filtered_df = self.df.loc[mask]
         
         # Count frequencies
         frequency = Counter(filtered_df['strong_number'])
@@ -145,72 +134,72 @@ class LottoAnalyzer:
         
         return dict(sorted(frequency.items()))
     
-    def get_hot_numbers(self, count=10, time_period=None):
+    def get_hot_numbers(self, count=10, days=None):
         """
         Get the most frequently drawn regular numbers
         
         Args:
             count: Number of hot numbers to return
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             
         Returns:
             List of hot numbers
         """
-        frequency = self.get_number_frequency(time_period)
+        frequency = self.get_number_frequency(days=days)
         hot_numbers = sorted(frequency.items(), key=lambda x: x[1], reverse=True)[:count]
         return [num for num, freq in hot_numbers]
     
-    def get_cold_numbers(self, count=10, time_period=None):
+    def get_cold_numbers(self, count=10, days=None):
         """
         Get the least frequently drawn regular numbers
         
         Args:
             count: Number of cold numbers to return
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             
         Returns:
             List of cold numbers
         """
-        frequency = self.get_number_frequency(time_period)
+        frequency = self.get_number_frequency(days=days)
         cold_numbers = sorted(frequency.items(), key=lambda x: x[1])[:count]
         return [num for num, freq in cold_numbers]
     
-    def get_hot_strong_numbers(self, count=3, time_period=None):
+    def get_hot_strong_numbers(self, count=3, days=None):
         """
         Get the most frequently drawn strong numbers
         
         Args:
             count: Number of hot strong numbers to return
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             
         Returns:
             List of hot strong numbers
         """
-        frequency = self.get_strong_number_frequency(time_period)
+        frequency = self.get_strong_number_frequency(days=days)
         hot_numbers = sorted(frequency.items(), key=lambda x: x[1], reverse=True)[:count]
         return [num for num, freq in hot_numbers]
     
-    def get_cold_strong_numbers(self, count=3, time_period=None):
+    def get_cold_strong_numbers(self, count=3, days=None):
         """
         Get the least frequently drawn strong numbers
         
         Args:
             count: Number of cold strong numbers to return
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             
         Returns:
             List of cold strong numbers
         """
-        frequency = self.get_strong_number_frequency(time_period)
+        frequency = self.get_strong_number_frequency(days=days)
         cold_numbers = sorted(frequency.items(), key=lambda x: x[1])[:count]
         return [num for num, freq in cold_numbers]
     
-    def get_number_pairs(self, time_period=None, top_n=10):
+    def get_number_pairs(self, days=None, top_n=10):
         """
         Find the most common pairs of numbers that appear together
         
         Args:
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             top_n: Number of top pairs to return
             
         Returns:
@@ -222,9 +211,12 @@ class LottoAnalyzer:
         
         # Filter by time period if specified
         filtered_df = self.df
-        if time_period:
-            cutoff_date = datetime.now() - timedelta(days=time_period)
-            filtered_df = self.df[self.df['draw_date'] >= cutoff_date]
+        if days:
+            end_date = pd.to_datetime('today')
+            start_date = end_date - pd.Timedelta(days=days)
+            self.df['draw_date'] = pd.to_datetime(self.df['draw_date'], format='%d/%m/%Y', errors='coerce')
+            mask = (self.df['draw_date'] >= start_date) & (self.df['draw_date'] <= end_date)
+            filtered_df = self.df.loc[mask]
         
         # Extract all combinations of pairs
         pairs = []
@@ -244,12 +236,13 @@ class LottoAnalyzer:
         
         return {f"{pair[0]}-{pair[1]}": freq for pair, freq in top_pairs}
     
-    def get_due_numbers(self, draws_threshold=10):
+    def get_due_numbers(self, draws_threshold=10, days=None):
         """
         Find numbers that haven't appeared in recent draws
         
         Args:
             draws_threshold: Number of recent draws to check
+            days: Optional time period to filter results (in days)
             
         Returns:
             List of due numbers
@@ -258,8 +251,17 @@ class LottoAnalyzer:
             logger.error("Not enough data available for analysis")
             return []
         
+        # Filter by time period if specified
+        filtered_df = self.df
+        if days:
+            end_date = pd.to_datetime('today')
+            start_date = end_date - pd.Timedelta(days=days)
+            self.df['draw_date'] = pd.to_datetime(self.df['draw_date'], format='%d/%m/%Y', errors='coerce')
+            mask = (self.df['draw_date'] >= start_date) & (self.df['draw_date'] <= end_date)
+            filtered_df = self.df.loc[mask]
+        
         # Get the most recent draws
-        recent_draws = self.df.head(draws_threshold)
+        recent_draws = filtered_df.head(draws_threshold)
         
         # Extract all numbers from recent draws
         recent_numbers = []
@@ -271,12 +273,13 @@ class LottoAnalyzer:
         
         return due_numbers
     
-    def get_due_strong_numbers(self, draws_threshold=10):
+    def get_due_strong_numbers(self, draws_threshold=10, days=None):
         """
         Find strong numbers that haven't appeared in recent draws
         
         Args:
             draws_threshold: Number of recent draws to check
+            days: Optional time period to filter results (in days)
             
         Returns:
             List of due strong numbers
@@ -284,6 +287,15 @@ class LottoAnalyzer:
         if self.df.empty or len(self.df) < draws_threshold:
             logger.error("Not enough data available for analysis")
             return []
+        
+        # Filter by time period if specified
+        filtered_df = self.df
+        if days:
+            end_date = pd.to_datetime('today')
+            start_date = end_date - pd.Timedelta(days=days)
+            self.df['draw_date'] = pd.to_datetime(self.df['draw_date'], format='%d/%m/%Y', errors='coerce')
+            mask = (self.df['draw_date'] >= start_date) & (self.df['draw_date'] <= end_date)
+            filtered_df = self.df.loc[mask]
         
         # Get the most recent draws
         recent_draws = filtered_df.head(draws_threshold)
@@ -380,22 +392,22 @@ class LottoAnalyzer:
         
         return stats
     
-    def plot_number_frequency(self, time_period=None, save_path=None):
+    def plot_number_frequency(self, days=None, save_path=None):
         """
         Plot the frequency of regular numbers
         
         Args:
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             save_path: Path to save the plot (if None, plot is displayed)
         """
-        frequency = self.get_number_frequency(time_period)
+        frequency = self.get_number_frequency(days=days)
         
         plt.figure(figsize=(14, 8))
         sns.barplot(x=list(frequency.keys()), y=list(frequency.values()))
         
         title = "Frequency of Regular Numbers"
-        if time_period:
-            title += f" (Last {time_period} days)"
+        if days:
+            title += f" (Last {days} days)"
         
         plt.title(title)
         plt.xlabel("Number")
@@ -411,22 +423,22 @@ class LottoAnalyzer:
             plt.tight_layout()
             plt.show()
     
-    def plot_strong_number_frequency(self, time_period=None, save_path=None):
+    def plot_strong_number_frequency(self, days=None, save_path=None):
         """
         Plot the frequency of strong numbers
         
         Args:
-            time_period: Optional time period to filter results (in days)
+            days: Optional time period to filter results (in days)
             save_path: Path to save the plot (if None, plot is displayed)
         """
-        frequency = self.get_strong_number_frequency(time_period)
+        frequency = self.get_strong_number_frequency(days=days)
         
         plt.figure(figsize=(10, 6))
         sns.barplot(x=list(frequency.keys()), y=list(frequency.values()))
         
         title = "Frequency of Strong Numbers"
-        if time_period:
-            title += f" (Last {time_period} days)"
+        if days:
+            title += f" (Last {days} days)"
         
         plt.title(title)
         plt.xlabel("Number")
@@ -459,11 +471,11 @@ class LottoAnalyzer:
             save_path=os.path.join(vis_dir, 'number_frequency_all_time.png')
         )
         self.plot_number_frequency(
-            time_period=365,
+            days=365,
             save_path=os.path.join(vis_dir, 'number_frequency_last_year.png')
         )
         self.plot_number_frequency(
-            time_period=30,
+            days=30,
             save_path=os.path.join(vis_dir, 'number_frequency_last_month.png')
         )
         
@@ -472,11 +484,11 @@ class LottoAnalyzer:
             save_path=os.path.join(vis_dir, 'strong_number_frequency_all_time.png')
         )
         self.plot_strong_number_frequency(
-            time_period=365,
+            days=365,
             save_path=os.path.join(vis_dir, 'strong_number_frequency_last_year.png')
         )
         self.plot_strong_number_frequency(
-            time_period=30,
+            days=30,
             save_path=os.path.join(vis_dir, 'strong_number_frequency_last_month.png')
         )
         
